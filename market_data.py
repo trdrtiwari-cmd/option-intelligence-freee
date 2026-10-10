@@ -35,7 +35,7 @@ YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 
 CANDLE_SECONDS = 300
 MARKET_TTL = 10          # seconds a market snapshot is reused
-CHAIN_TTL = 45           # seconds an option-chain snapshot is reused
+CHAIN_TTL = int(os.getenv("CHAIN_TTL", "20"))  # seconds an option-chain snapshot is reused
 CHAIN_FAIL_BACKOFF = 30  # seconds to wait before retrying NSE after a failure
 STALE_AFTER = 900        # data older than this during market hours = STALE
 
@@ -336,6 +336,7 @@ def parse_chain(j, expiry_hint=None):
         "resistance": resistance,
         "max_pain": max_pain,
         "rows": window,
+        "all_rows": parsed,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -508,3 +509,40 @@ async def get_nse_option_chain(symbol):
             msg = msg[:217] + "..."
         _chain_fail[symbol] = (time.monotonic(), msg)
         raise RuntimeError(msg)
+
+
+def public_chain(chain):
+    """Chain payload for API responses: drops the bulky full strike list."""
+    return {k: v for k, v in chain.items() if k != "all_rows"}
+
+
+async def get_option_quote(symbol, strike, kind, expiry=None):
+    """Live premium for ONE option leg, read from the (briefly cached) chain."""
+    chain = await get_nse_option_chain(symbol)
+    chain_expiry = chain.get("expiry")
+    if expiry and chain_expiry and expiry != chain_expiry:
+        return {
+            "ok": False, "expired": True, "symbol": symbol, "strike": strike, "type": kind,
+            "expiry": expiry, "chain_expiry": chain_expiry,
+            "error": f"Chain now shows expiry {chain_expiry}; this contract ({expiry}) has expired or rolled.",
+        }
+    row = next((r for r in chain.get("all_rows", []) if abs(r["strike"] - strike) < 1e-6), None)
+    if not row:
+        return {"ok": False, "symbol": symbol, "strike": strike, "type": kind, "expiry": chain_expiry,
+                "error": f"Strike {strike:g} not found in the chain"}
+    leg = row["ce" if kind == "CE" else "pe"]
+    ltp = leg.get("ltp")
+    if not isinstance(ltp, (int, float)) or ltp <= 0:
+        ltp = None  # untraded / illiquid: never pretend we have a price
+    return {
+        "ok": ltp is not None,
+        "error": None if ltp is not None else "No traded price for this strike yet",
+        "symbol": symbol, "strike": strike, "type": kind, "expiry": chain_expiry,
+        "ltp": ltp, "oi": leg.get("oi"), "iv": leg.get("iv"), "volume": leg.get("volume"),
+        "underlying": chain.get("underlying"),
+        "source": chain.get("source"),
+        "served_from_cache": bool(chain.get("served_from_cache")),
+        "cache_age_s": chain.get("cache_age_s"),
+        "chain_timestamp": chain.get("timestamp"),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }

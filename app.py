@@ -7,7 +7,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from indicators import calculate_indicators
-from market_data import get_market_snapshot, get_nse_option_chain, session_info
+from market_data import (
+    get_market_snapshot,
+    get_nse_option_chain,
+    get_option_quote,
+    public_chain,
+    session_info,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -58,9 +64,24 @@ async def market(symbol: str = Query("NIFTY", pattern=SYMBOL_RE)):
 @app.get("/api/option-chain")
 async def option_chain(symbol: str = Query("NIFTY", pattern=SYMBOL_RE)):
     try:
-        return await get_nse_option_chain(symbol)
+        return public_chain(await get_nse_option_chain(symbol))
     except Exception as e:
         return {"ok": False, "symbol": symbol, "source": "NSE", "error": _err(e), "timestamp": _now()}
+
+
+@app.get("/api/option-quote")
+async def option_quote(
+    symbol: str = Query("NIFTY", pattern=SYMBOL_RE),
+    strike: float = Query(..., gt=0),
+    kind: str = Query("CE", pattern="^(CE|PE)$"),
+    expiry: str = Query(None, max_length=20),
+):
+    """Live premium of one strike - used to monitor an open paper trade."""
+    try:
+        return await get_option_quote(symbol, strike, kind, expiry)
+    except Exception as e:
+        return {"ok": False, "symbol": symbol, "strike": strike, "type": kind,
+                "error": str(e)[:200], "timestamp": _now()}
 
 
 @app.get("/api/analysis")
@@ -95,7 +116,7 @@ async def analysis(symbol: str = Query("NIFTY", pattern=SYMBOL_RE)):
     if isinstance(chain_res, BaseException):
         chain = {"ok": False, "error": str(chain_res)[:220]}
     else:
-        chain = chain_res
+        chain = public_chain(chain_res)
 
     ind = calculate_indicators(market_data.get("candles", []))
     decision = build_decision(market_data, ind, chain, market_data["session"])

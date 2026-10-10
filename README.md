@@ -47,14 +47,24 @@ PUT needs ≥ 70% alignment and a ≥ 40% lead over the other side. It is forced
 when ADX < 18, when the market is closed or the data is stale, before 09:30 IST and
 after 15:00 IST. Tunable constants are at the top of `app.py`.
 
-## Paper trading rules
+## Paper trading rules (option premium, live)
 
-* Levels are applied to the **index price**, not to an option premium.
-* Stop/target are checked on every 5-minute candle high/low after entry and on the latest
-  price. If both are touched in one candle, the stop is assumed to hit first.
-* Target fills at the target price. A stop fills at the stop-loss price if reached,
-  otherwise at the worst price seen between trigger and stop-loss.
-* A trade left open on one index is still monitored while you view the other.
+* Pick a strike by clicking a CE/PE premium in the **Option Chain** card (or use the
+  dropdowns). You always BUY the option; entry defaults to the live premium (last traded
+  price from the option chain).
+* Stop-loss trigger, stop-loss price and target are in **option premium ₹**. Quantity =
+  lots × lot size (defaults NIFTY 65, BANKNIFTY 30 as of Jan 2026 - edit the field if
+  NSE has revised them). "Quick levels" fills SL/target from percentages.
+* The open trade is refreshed about every 10 s from `/api/option-quote` (served from a
+  20 s chain cache) and shows live premium, unrealized P&L (after the charges you enter),
+  and the highest/lowest premium seen.
+* Exits only see prices the app actually polled - a spike between two refreshes can be
+  missed. A stop fills at the observed premium (flagged "gapped" if below the stop-loss
+  price); a target fills at the target price.
+* Optional auto square-off at 15:25 IST (needs the tab open). Trades are only tracked
+  against the **nearest expiry**; if it expires/rolls you are told to close manually.
+* Needs the option chain to load (Dhan keys recommended on Render). Without it the app
+  cannot track premiums and will not open a trade.
 * The account is stored in your browser (localStorage); use **Reset account** to clear it.
 
 ## Data sources & limits
