@@ -1,1 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Option Intelligence Free</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>OPTION INTELLIGENCE <span>FREE</span></h1>
+    <p>Intraday option-buyer intelligence + paper trading</p>
+  </div>
+  <div class="controls">
+    <button id="nifty" class="active">NIFTY</button>
+    <button id="bank">BANKNIFTY</button>
+    <button id="refresh">↻ Refresh</button>
+  </div>
+</header>
 
+<main>
+  <div id="banner" class="banner" hidden></div>
+
+  <section class="hero">
+    <div>
+      <div class="muted">FINAL MARKET CONDITION</div>
+      <div id="condition" class="condition">CONNECTING...</div>
+    </div>
+    <div class="signalbox">
+      <div class="muted">TRADE DECISION</div>
+      <div id="signal" class="signal wait">WAIT</div>
+      <div id="confidence">0% signal strength</div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>Market</h2>
+      <div class="big" id="price">--</div>
+      <div class="chg" id="change">--</div>
+      <div class="source" id="marketSource">--</div>
+      <div class="mini"><span>Session</span><b id="session">--</b></div>
+      <div class="mini"><span>5M candles</span><b id="candleCount">--</b></div>
+      <div class="mini"><span>Day range</span><b id="dayRange">--</b></div>
+    </div>
+    <div class="card">
+      <h2>Trend &amp; Momentum</h2>
+      <div class="row"><span>EMA 9</span><b id="ema9">--</b></div>
+      <div class="row"><span>EMA 21</span><b id="ema21">--</b></div>
+      <div class="row"><span>VWAP</span><b id="vwap">--</b></div>
+      <div class="row"><span>RSI</span><b id="rsi">--</b></div>
+    </div>
+    <div class="card">
+      <h2>Volatility / Volume</h2>
+      <div class="row"><span>ATR 14</span><b id="atr">--</b></div>
+      <div class="row"><span>ADX 14</span><b id="adx">--</b></div>
+      <div class="row"><span>+DI / −DI</span><b id="di">--</b></div>
+      <div class="row"><span>Volume ratio</span><b id="volratio">--</b></div>
+    </div>
+    <div class="card">
+      <h2>Option Intelligence</h2>
+      <div class="row"><span>PCR (expiry)</span><b id="pcr">--</b></div>
+      <div class="row"><span>PCR (near ATM)</span><b id="pcrnear">--</b></div>
+      <div class="row"><span>CE OI / PE OI</span><b id="oi">--</b></div>
+      <div class="row"><span>Resistance / Support</span><b id="walls">--</b></div>
+      <div class="row"><span>Max pain / ATM IV</span><b id="painiv">--</b></div>
+      <div class="row"><span>Expiry</span><b id="expiry">--</b></div>
+      <div class="source" id="oiSource">--</div>
+    </div>
+  </section>
+
+  <section class="decision card">
+    <h2>Decision Engine</h2>
+    <div class="scores">
+      <div><span>BUY CALL score</span><b id="bull">0</b></div>
+      <div><span>BUY PUT score</span><b id="bear">0</b></div>
+      <div><span>Entry</span><b id="entry">--</b></div>
+      <div><span>SL</span><b id="sl">--</b></div>
+      <div><span>Target</span><b id="target">--</b></div>
+    </div>
+    <ul id="breakdown" class="breakdown"></ul>
+    <p id="reason">Waiting for data...</p>
+  </section>
+
+  <section class="paper card">
+    <div class="sectionhead">
+      <h2>Paper Trading — Manual Risk Levels</h2>
+      <div>
+        <button id="callTrade">Paper BUY CALL</button>
+        <button id="putTrade">Paper BUY PUT</button>
+        <button id="closeTrade" class="secondary">Close Open Trade</button>
+        <button id="resetPaper" class="secondary">Reset account</button>
+      </div>
+    </div>
+    <p class="paper-note">These levels are applied to the selected index price (NIFTY/BANKNIFTY), not to an option premium. Stops and targets are checked against every 5-minute candle high/low since entry (stop wins if both are touched in one candle) plus the latest price. This is a directional paper simulation only; it does not place orders.</p>
+    <div class="risk-fields">
+      <label>Entry price <input id="manualEntry" type="number" step="0.05" placeholder="Auto: current index price"></label>
+      <label>Stop-loss trigger <input id="manualTrigger" type="number" step="0.05" placeholder="Required"></label>
+      <label>Stop-loss price <input id="manualSL" type="number" step="0.05" placeholder="Required"></label>
+      <label>Target price <input id="manualTarget" type="number" step="0.05" placeholder="Required"></label>
+      <label>Units / multiplier <input id="manualUnits" type="number" min="1" step="1" value="1"></label>
+    </div>
+    <div class="papergrid">
+      <div><span>Virtual Capital</span><b id="capital">₹1,00,000</b></div>
+      <div class="wide"><span>Open Trade</span><b id="openTrade">None</b></div>
+      <div><span>Realized P&amp;L</span><b id="pnl">₹0</b></div>
+      <div><span>Trades / Win rate</span><b id="tradeCount">0</b></div>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Time</th><th>Type</th><th>Entry</th><th>SL trigger</th><th>Stop-loss</th><th>Target</th><th>Exit</th><th>P&amp;L</th><th>Status</th></tr></thead>
+        <tbody id="tradeRows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="disclaimer">Educational tool using free public data (Yahoo Finance, NSE). Data can be delayed, incomplete or blocked. Not investment advice; paper trades only.</p>
+  <div id="status" class="status">CONNECTING...</div>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
