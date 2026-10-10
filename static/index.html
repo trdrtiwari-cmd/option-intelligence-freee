@@ -84,33 +84,73 @@
     <p id="reason">Waiting for data...</p>
   </section>
 
+  <section class="chain card">
+    <div class="sectionhead">
+      <h2>Option Chain — near ATM</h2>
+      <span class="muted" id="chainMeta"></span>
+    </div>
+    <p class="paper-note">Click a CE or PE premium to select that strike for a paper trade. Premiums are the last traded price from the option chain.</p>
+    <div class="tablewrap">
+      <table class="chaintable">
+        <thead><tr><th>CE OI</th><th>CE LTP</th><th>Strike</th><th>PE LTP</th><th>PE OI</th></tr></thead>
+        <tbody id="chainRows"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="paper card">
     <div class="sectionhead">
-      <h2>Paper Trading — Manual Risk Levels</h2>
+      <h2>Paper Trading — Option Premium (live)</h2>
       <div>
-        <button id="callTrade">Paper BUY CALL</button>
-        <button id="putTrade">Paper BUY PUT</button>
+        <button id="callTrade">Paper BUY selected</button>
         <button id="closeTrade" class="secondary">Close Open Trade</button>
         <button id="resetPaper" class="secondary">Reset account</button>
       </div>
     </div>
-    <p class="paper-note">These levels are applied to the selected index price (NIFTY/BANKNIFTY), not to an option premium. Stops and targets are checked against every 5-minute candle high/low since entry (stop wins if both are touched in one candle) plus the latest price. This is a directional paper simulation only; it does not place orders.</p>
+    <p class="paper-note">You buy the selected option at its live premium. Stop-loss, target and profit/loss are all measured on the <b>option premium</b> and refreshed from the option chain about every 10 seconds. Stops and targets can only react to the prices the app actually sees, so a fast spike between two refreshes can be missed. Nothing here places a real order.</p>
+
     <div class="risk-fields">
-      <label>Entry price <input id="manualEntry" type="number" step="0.05" placeholder="Auto: current index price"></label>
-      <label>Stop-loss trigger <input id="manualTrigger" type="number" step="0.05" placeholder="Required"></label>
-      <label>Stop-loss price <input id="manualSL" type="number" step="0.05" placeholder="Required"></label>
-      <label>Target price <input id="manualTarget" type="number" step="0.05" placeholder="Required"></label>
-      <label>Units / multiplier <input id="manualUnits" type="number" min="1" step="1" value="1"></label>
+      <label>Option type
+        <select id="selType"><option value="CE">CE (Call)</option><option value="PE">PE (Put)</option></select>
+      </label>
+      <label>Strike <select id="selStrike"><option value="">Loading...</option></select></label>
+      <label>Lots <input id="lots" type="number" min="1" step="1" value="1"></label>
+      <label>Lot size (units) <input id="lotSize" type="number" min="1" step="1" value="65"></label>
+      <label>Entry premium ₹ <input id="manualEntry" type="number" step="0.05" placeholder="Auto: live premium"></label>
+      <label>Stop-loss trigger ₹ <input id="manualTrigger" type="number" step="0.05" placeholder="Required"></label>
+      <label>Stop-loss price ₹ <input id="manualSL" type="number" step="0.05" placeholder="Required"></label>
+      <label>Target ₹ <input id="manualTarget" type="number" step="0.05" placeholder="Required"></label>
+      <label>Round-trip charges ₹ <input id="charges" type="number" min="0" step="1" value="0"></label>
+      <label>Quick levels (SL % / Target %)
+        <span class="inline"><input id="slPct" type="number" min="1" max="95" value="20"><input id="tgtPct" type="number" min="1" value="40"><button id="applyPct" type="button">Apply</button></span>
+      </label>
     </div>
+    <label class="check"><input id="autoSquare" type="checkbox" checked> Auto square-off at 15:25 IST (keep this tab open)</label>
+    <div class="selinfo" id="selInfo">Select a strike from the chain.</div>
+
+    <div id="openPanel" class="openpanel" hidden>
+      <div class="opgrid">
+        <div><span>Open contract</span><b id="opContract">--</b></div>
+        <div><span>Entry premium</span><b id="opEntry">--</b></div>
+        <div><span>Live premium</span><b id="opLtp">--</b></div>
+        <div><span>Unrealized P&amp;L</span><b id="opPnl">--</b></div>
+        <div><span>Stop trigger / price</span><b id="opSl">--</b></div>
+        <div><span>Target</span><b id="opTarget">--</b></div>
+        <div><span>Premium high / low seen</span><b id="opRange">--</b></div>
+        <div><span>Quantity</span><b id="opQty">--</b></div>
+      </div>
+      <div class="source" id="opMeta">--</div>
+    </div>
+
     <div class="papergrid">
-      <div><span>Virtual Capital</span><b id="capital">₹1,00,000</b></div>
-      <div class="wide"><span>Open Trade</span><b id="openTrade">None</b></div>
+      <div><span>Virtual Capital (realized)</span><b id="capital">₹1,00,000</b></div>
+      <div><span>Equity incl. open trade</span><b id="equity">₹1,00,000</b></div>
       <div><span>Realized P&amp;L</span><b id="pnl">₹0</b></div>
       <div><span>Trades / Win rate</span><b id="tradeCount">0</b></div>
     </div>
     <div class="tablewrap">
       <table>
-        <thead><tr><th>Time</th><th>Type</th><th>Entry</th><th>SL trigger</th><th>Stop-loss</th><th>Target</th><th>Exit</th><th>P&amp;L</th><th>Status</th></tr></thead>
+        <thead><tr><th>Time</th><th>Contract</th><th>Qty</th><th>Entry</th><th>SL trigger</th><th>Stop-loss</th><th>Target</th><th>Exit</th><th>P&amp;L</th><th>Status</th></tr></thead>
         <tbody id="tradeRows"></tbody>
       </table>
     </div>
