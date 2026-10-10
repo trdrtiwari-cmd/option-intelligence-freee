@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: option-intelligence-free
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      # RECOMMENDED for reliable option-chain data on Render (Dhan Data API):
+      # - key: DHAN_CLIENT_ID
+      #   sync: false
+      # - key: DHAN_ACCESS_TOKEN
+      #   sync: false
+      # Optional: route NSE requests through a proxy (e.g. an Indian-IP proxy)
+      # if NSE blocks Render's IPs. Format: http://user:pass@host:port
+      # - key: NSE_PROXY
+      #   sync: false
