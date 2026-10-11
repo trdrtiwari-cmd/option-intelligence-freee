@@ -165,7 +165,7 @@ function render(j) {
     chg.textContent = "--";
     chg.className = "chg";
   }
-  setText("marketSource", m.source || "--");
+  setText("marketSource", (m.source || "--") + (m.volume_source ? " + " + m.volume_source + " volume (proxy)" : ""));
   setText("candleCount", (m.candles || []).length || "--");
   const sess = $("session");
   sess.textContent = s.status || "--";
@@ -174,12 +174,12 @@ function render(j) {
 
   setText("ema9", fmt(i.ema9));
   setText("ema21", fmt(i.ema21));
-  setText("vwap", i.vwap == null ? "n/a (no index volume)" : fmt(i.vwap));
+  setText("vwap", i.vwap == null ? "n/a (no volume feed)" : fmt(i.vwap) + (m.volume_proxy ? " (ETF vol)" : ""));
   setText("rsi", fmt(i.rsi));
   setText("atr", fmt(i.atr));
   setText("adx", fmt(i.adx));
   setText("di", i.plus_di == null ? "--" : fmt(i.plus_di) + " / " + fmt(i.minus_di));
-  setText("volratio", i.volume_ratio == null ? "n/a" : fmt(i.volume_ratio) + "x");
+  setText("volratio", i.volume_ratio == null ? "n/a" : fmt(i.volume_ratio) + "x" + (m.volume_proxy ? " (ETF)" : ""));
 
   setText("pcr", c.pcr == null ? "--" : Number(c.pcr).toFixed(2));
   setText("pcrnear", c.pcr_near_atm == null ? "--" : Number(c.pcr_near_atm).toFixed(2));
