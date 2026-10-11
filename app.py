@@ -270,6 +270,8 @@ def build_decision(market, ind, chain, session):
         f"({round(100 * dominant / max_pts)}% alignment). "
         f"A signal needs >= {round(MIN_SHARE * 100)}% alignment and a >= {round(MIN_LEAD * 100)}% lead. "
         + (f"Unavailable (excluded): {', '.join(unavailable)}. " if unavailable else "")
+        + (f"VWAP and volume use {market.get('volume_source')} ETF volume as a proxy for index volume. "
+           if market.get("volume_proxy") and (vwap is not None or vol_ratio is not None) else "")
         + " ".join(warnings)
     ).strip()
 

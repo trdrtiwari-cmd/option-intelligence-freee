@@ -30,6 +30,10 @@ NSE_PAGE_HEADERS = {
 }
 
 YAHOO = {"NIFTY": "^NSEI", "BANKNIFTY": "^NSEBANK"}
+# Index candles carry no volume. These ETFs track the index and trade with real
+# volume, so their 5m volume is used as a proxy for intraday activity (VWAP weights,
+# volume ratio). Only the VOLUME is borrowed - prices stay the index's own.
+VOLUME_PROXY = {"NIFTY": "NIFTYBEES.NS", "BANKNIFTY": "BANKBEES.NS"}
 YAHOO_HOSTS = ("query1.finance.yahoo.com", "query2.finance.yahoo.com")
 YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 
@@ -140,8 +144,7 @@ def _parse_yahoo(j):
     return candles, result.get("meta") or {}
 
 
-async def yahoo_candles(symbol):
-    ticker = YAHOO[symbol]
+async def _yahoo_fetch(ticker):
     params = {"interval": "5m", "range": "5d", "includePrePost": "false"}
     last_err = None
     async with httpx.AsyncClient(timeout=12, headers=YAHOO_HEADERS, follow_redirects=True) as c:
@@ -158,10 +161,41 @@ async def yahoo_candles(symbol):
     raise RuntimeError("Yahoo Finance unavailable: " + _short_err(last_err))
 
 
+async def yahoo_candles(symbol):
+    return await _yahoo_fetch(YAHOO[symbol])
+
+
+def _apply_volume_proxy(candles, proxy_candles, min_coverage=0.8):
+    """Copy ETF volume onto index candles (matched by timestamp). Returns True if applied."""
+    vol = {x["time"]: x["volume"] for x in proxy_candles}
+    matched = sum(1 for x in candles if vol.get(x["time"], 0) > 0)
+    if not candles or matched < min_coverage * len(candles):
+        return False
+    for x in candles:
+        x["volume"] = float(vol.get(x["time"], 0))
+    return True
+
+
 async def _build_snapshot(symbol):
-    candles, meta = await yahoo_candles(symbol)
+    res_idx, res_proxy = await asyncio.gather(
+        _yahoo_fetch(YAHOO[symbol]),
+        _yahoo_fetch(VOLUME_PROXY[symbol]),
+        return_exceptions=True,
+    )
+    if isinstance(res_idx, BaseException):
+        raise res_idx
+    candles, meta = res_idx
     if not candles:
         raise RuntimeError("Yahoo returned no candles")
+
+    volume_proxy, volume_source, volume_note = False, None, None
+    if not any(x["volume"] > 0 for x in candles):
+        if isinstance(res_proxy, BaseException):
+            volume_note = f"{VOLUME_PROXY[symbol]} volume unavailable: {_short_err(res_proxy)}"
+        elif _apply_volume_proxy(candles, res_proxy[0]):
+            volume_proxy, volume_source = True, VOLUME_PROXY[symbol]
+        else:
+            volume_note = f"{VOLUME_PROXY[symbol]} candles did not line up with the index candles"
     has_volume = any(x["volume"] > 0 for x in candles)
 
     last = candles[-1]["close"]
@@ -179,9 +213,16 @@ async def _build_snapshot(symbol):
         "last": last,
         "last_data_ts": last_ts,
         "volume_available": has_volume,
+        "volume_proxy": volume_proxy,
+        "volume_source": volume_source,
         "diagnostics": {
             "candles": "OK",
-            "volume": "OK" if has_volume else "Yahoo index candles report zero volume; VWAP / volume ratio are unavailable",
+            "volume": (
+                f"Index has no volume; using {volume_source} ETF volume as a proxy" if volume_proxy
+                else "OK" if has_volume
+                else "Index candles report zero volume; VWAP / volume ratio unavailable"
+                     + (f" ({volume_note})" if volume_note else "")
+            ),
             "option_chain": "Fetched separately from NSE; NSE often blocks cloud-hosting IPs",
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),

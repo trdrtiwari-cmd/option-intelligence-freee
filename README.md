@@ -70,7 +70,9 @@ after 15:00 IST. Tunable constants are at the top of `app.py`.
 ## Data sources & limits
 
 * Yahoo Finance 5m index candles. Index candles carry zero volume, so VWAP and volume
-  ratio are shown as unavailable (never faked).
+  ratio use the 5-minute volume of a tracking ETF as a proxy (NIFTYBEES.NS for NIFTY,
+  BANKBEES.NS for BANKNIFTY); prices stay the index's own. The UI marks these values
+  "(ETF vol)". If the ETF feed fails, they show as unavailable and are left out of the score.
 * NSE option chain (OI, PCR, IV, support/resistance, max pain). NSE often blocks cloud IPs.
   The app tries the current `option-chain-v3` API, then the legacy endpoint. If both fail
   you will see a short reason in the Option Intelligence card and the engine simply ignores PCR.
