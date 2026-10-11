@@ -53,7 +53,7 @@ function normTrade(t) {
   // trade saved by the older index-based version
   return {
     time: t.time, instrument: `${t.symbol || ""} ${t.type || ""} (index)`, qty: t.units,
-    entry: t.entry, trigger: t.trigger, sl: t.sl, target: t.target, exit: t.exit, pnl: t.pnl, status: t.status,
+    entry: t.entry, sl: t.sl ?? t.trigger, trail: "--", target: t.target, exit: t.exit, pnl: t.pnl, status: t.status,
   };
 }
 
@@ -63,7 +63,13 @@ function loadPaper() {
     if (raw) {
       const p = JSON.parse(raw);
       if (p && typeof p === "object") {
-        const open = p.open && p.open.optType ? p.open : null;
+        let open = p.open && p.open.optType ? p.open : null;
+        if (open && open.trail === undefined) { // saved before trailing stops existed
+          open.sl = open.trigger ?? open.sl;
+          open.trailMode = null;
+          open.trailVal = null;
+          open.trail = "off";
+        }
         if (p.open && !open) legacyDropped = true;
         return {
           capital: Number.isFinite(p.capital) ? p.capital : 100000,
@@ -315,22 +321,27 @@ function openPaper() {
   const live = leg && leg.ltp > 0 ? leg.ltp : null;
   const manual = num("manualEntry");
   const entry = manual ?? live;
-  const trigger = num("manualTrigger");
   const sl = num("manualSL");
+  const trailVal = num("trailVal");
+  const trailMode = $("trailMode").value;
   const target = num("manualTarget");
   const lots = num("lots") ?? 1;
   const lotSize = num("lotSize") ?? getLot(symbol);
   const charges = num("charges") ?? 0;
 
   if (entry == null || entry <= 0) { alert("This strike has no live premium. Pick another strike or type an entry premium."); return; }
-  if (trigger == null || sl == null || target == null) {
-    alert("Enter a stop-loss trigger, stop-loss price and target (in option premium ₹), or use the Quick levels button.");
+  if (sl == null || target == null) {
+    alert("Enter an initial stop-loss and a target (in option premium ₹), or use the Quick levels button.");
+    return;
+  }
+  if (trailVal != null && (trailVal < 0 || (trailMode === "pct" && trailVal >= 100))) {
+    alert("Trailing distance must be positive (and below 100% when using %). Leave it blank for a fixed stop.");
     return;
   }
   if (!Number.isInteger(lots) || lots < 1) { alert("Lots must be a whole number of at least 1."); return; }
   if (lotSize < 1) { alert("Lot size must be at least 1."); return; }
-  if (!(target > entry && trigger < entry && sl <= trigger && sl >= 0)) {
-    alert("You are BUYING the option, so: target above entry; stop-loss trigger below entry; stop-loss price at or below the trigger (and not negative).");
+  if (!(target > entry && sl < entry && sl >= 0)) {
+    alert("You are BUYING the option, so: target above entry and the initial stop-loss below entry (and not negative).");
     return;
   }
 
@@ -349,7 +360,10 @@ function openPaper() {
   safeSet("oi_lot_" + symbol, String(lotSize));
   paper.open = {
     symbol, optType: selType, strike: selStrike, expiry: c.expiry || null,
-    entry, trigger, sl, target, lots, lotSize, qty, charges,
+    entry, sl, target, lots, lotSize, qty, charges,
+    trailMode: trailVal ? trailMode : null,
+    trailVal: trailVal || null,
+    trail: trailVal ? (trailMode === "pct" ? trailVal + "%" : "₹" + trailVal) : "off",
     spotAtEntry: c.underlying ?? null,
     time: new Date().toLocaleString("en-IN"),
     entryTs: Math.floor(Date.now() / 1000),
@@ -370,7 +384,7 @@ function closePaper(exitPrice, status) {
   paper.trades.unshift({
     time: t.time,
     instrument: `${t.symbol} ${fmt(t.strike)} ${t.optType}`,
-    qty: t.qty, entry: t.entry, trigger: t.trigger, sl: t.sl, target: t.target,
+    qty: t.qty, entry: t.entry, sl: t.sl, trail: t.trail || "off", peak: t.maxLtp ?? null, target: t.target,
     exit: exitPrice, pnl, status, expiry: t.expiry,
   });
   paper.open = null;
@@ -392,11 +406,24 @@ function manualClose() {
   closePaper(price, "MANUAL CLOSE");
 }
 
-/* Stops/targets only see prices we actually polled (no tick data on the free feed).
-   Stop fills at the observed premium (honest about gaps); target fills at the target. */
+/* Current stop = the higher of the initial stop-loss and (peak premium - trail distance).
+   The peak only ever rises, so the stop only ever ratchets up. Stops/targets only see prices
+   we actually polled (no tick data on the free feed): a stop fills at the observed premium,
+   a target fills at the target price. */
+function stopLevel(t) {
+  const peak = Math.max(t.entry, t.maxLtp ?? t.entry);
+  let stop = t.sl;
+  if (t.trailVal) {
+    const dist = t.trailMode === "pct" ? peak * t.trailVal / 100 : t.trailVal;
+    stop = Math.max(stop, peak - dist);
+  }
+  return Math.max(0, Number(r05(stop)));
+}
+
 function checkOption(t, ltp) {
-  if (ltp <= t.trigger) {
-    return { price: ltp, status: ltp < t.sl ? "STOP-LOSS (GAPPED BELOW SL)" : "STOP-LOSS TRIGGERED" };
+  const stop = stopLevel(t);
+  if (ltp <= stop) {
+    return { price: ltp, status: stop > t.sl + 1e-9 ? "TRAILING STOP HIT" : "STOP-LOSS HIT" };
   }
   if (ltp >= t.target) return { price: t.target, status: "TARGET HIT" };
   return null;
@@ -462,7 +489,8 @@ function renderOpenTrade() {
   const pnl = $("opPnl");
   pnl.textContent = un == null ? "--" : money(un) + " (" + ((ltp - t.entry) / t.entry * 100).toFixed(1) + "%)";
   pnl.className = un > 0 ? "pos" : un < 0 ? "neg" : "";
-  setText("opSl", `${money(t.trigger)} / ${money(t.sl)}`);
+  const stop = stopLevel(t);
+  setText("opSl", `${money(stop)} · ` + (stop > t.sl + 1e-9 ? "trailing ↑ (initial " + money(t.sl) + ")" : t.trailVal ? "initial, trail " + t.trail : "fixed"));
   setText("opTarget", money(t.target));
   setText("opRange", t.maxLtp == null ? "--" : `${money(t.maxLtp)} / ${money(t.minLtp)}`);
   setText("opQty", `${t.qty} (${t.lots} lot × ${t.lotSize})`);
@@ -508,8 +536,9 @@ function renderPaper() {
       <td>${esc(x.instrument)}</td>
       <td>${fmt(x.qty)}</td>
       <td>${fmt(x.entry)}</td>
-      <td>${fmt(x.trigger)}</td>
       <td>${fmt(x.sl)}</td>
+      <td>${esc(x.trail ?? "--")}</td>
+      <td>${fmt(x.peak)}</td>
       <td>${fmt(x.target)}</td>
       <td>${fmt(x.exit)}</td>
       <td class="${x.pnl > 0 ? "pos" : x.pnl < 0 ? "neg" : ""}">${money(x.pnl)}</td>
@@ -522,12 +551,12 @@ function applyPct() {
   const leg = selStrike != null ? legFromChain(selStrike, selType) : null;
   const entry = num("manualEntry") ?? (leg && leg.ltp > 0 ? leg.ltp : null);
   if (entry == null) { alert("No live premium for the selected strike yet."); return; }
-  const slp = (num("slPct") ?? 20) / 100;
-  const tgp = (num("tgtPct") ?? 40) / 100;
-  const trigger = Number(r05(entry * (1 - slp)));
-  $("manualTrigger").value = trigger.toFixed(2);
-  $("manualSL").value = Math.max(0, Number(r05(trigger * 0.98))).toFixed(2);
-  $("manualTarget").value = Number(r05(entry * (1 + tgp))).toFixed(2);
+  const slPct = num("slPct") ?? 20;
+  const tgPct = num("tgtPct") ?? 40;
+  $("manualSL").value = Math.max(0, Number(r05(entry * (1 - slPct / 100)))).toFixed(2);
+  $("trailVal").value = slPct;
+  $("trailMode").value = "pct";
+  $("manualTarget").value = Number(r05(entry * (1 + tgPct / 100))).toFixed(2);
 }
 
 /* --------------------------------------------------------------- controls */
