@@ -52,15 +52,17 @@ after 15:00 IST. Tunable constants are at the top of `app.py`.
 * Pick a strike by clicking a CE/PE premium in the **Option Chain** card (or use the
   dropdowns). You always BUY the option; entry defaults to the live premium (last traded
   price from the option chain).
-* Stop-loss trigger, stop-loss price and target are in **option premium ₹**. Quantity =
-  lots × lot size (defaults NIFTY 65, BANKNIFTY 30 as of Jan 2026 - edit the field if
-  NSE has revised them). "Quick levels" fills SL/target from percentages.
+* Initial stop-loss and target are in **option premium ₹**. An optional **trailing stop**
+  (a % or ₹ distance below the peak premium) ratchets the stop up as the premium rises:
+  stop = max(initial stop-loss, peak − trail). It never moves down. Leave the trail blank for
+  a fixed stop. Quantity = lots × lot size (defaults NIFTY 65, BANKNIFTY 30 as of Jan 2026 -
+  edit the field if NSE has revised them). "Quick levels" fills stop-loss, trail % and target.
 * The open trade is refreshed about every 10 s from `/api/option-quote` (served from a
   20 s chain cache) and shows live premium, unrealized P&L (after the charges you enter),
   and the highest/lowest premium seen.
 * Exits only see prices the app actually polled - a spike between two refreshes can be
-  missed. A stop fills at the observed premium (flagged "gapped" if below the stop-loss
-  price); a target fills at the target price.
+  missed. A stop (fixed or trailing) fills at the observed premium; a target fills at the target price.
+  The trailing peak is the highest premium the app has seen.
 * Optional auto square-off at 15:25 IST (needs the tab open). Trades are only tracked
   against the **nearest expiry**; if it expires/rolls you are told to close manually.
 * Needs the option chain to load (Dhan keys recommended on Render). Without it the app
